@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Allow username availability checks without auth
+      allow read: if true;
+      
+      // Allow create if the user is creating their own document
+      allow create: if isOwner(userId);
+      
+      // Allow update if user is updating their own document
+      allow update: if isOwner(userId);
+    }
+  }
+}
