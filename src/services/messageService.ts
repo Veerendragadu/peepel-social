@@ -8,10 +8,51 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '../lib/firebaseClient';
 import type { Chat, Message } from '../types';
+
+export const createOrGetChat = async (currentUserId: string, otherUserId: string) => {
+  try {
+    // Check if chat already exists
+    const chatsRef = collection(db, 'chats');
+    const q = query(
+      chatsRef,
+      where('participants', 'array-contains', currentUserId)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const existingChat = querySnapshot.docs.find(doc => {
+      const data = doc.data();
+      return data.participants?.includes(otherUserId);
+    });
+
+    if (existingChat) {
+      return {
+        chatId: existingChat.id,
+        ...existingChat.data()
+      };
+    }
+
+    // Create new chat if none exists
+    const chatData = {
+      participants: [currentUserId, otherUserId],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    const newChatRef = await addDoc(chatsRef, chatData);
+    return {
+      chatId: newChatRef.id,
+      ...chatData
+    };
+  } catch (error) {
+    console.error('Error creating/getting chat:', error);
+    throw error;
+  }
+};
 
 export const listenToChats = (
   userId: string,
@@ -41,14 +82,6 @@ export const listenToChats = (
   );
 };
 
-export const createChat = async (participants: string[]) => {
-  return addDoc(collection(db, 'chats'), {
-    participants,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
-};
-
 export const sendMessage = async (chatId: string, message: {
   senderId: string;
   receiverId: string;
@@ -76,48 +109,21 @@ export const sendMessage = async (chatId: string, message: {
   return messageRef;
 };
 
-export const listenToMessages = (
-  chatId: string,
-  onSuccess: (messages: Message[]) => void,
-  onError: (error: Error) => void
-) => {
-  const messagesRef = collection(db, 'messages');
-  const q = query(
-    messagesRef,
-    where('chatId', '==', chatId),
-    orderBy('createdAt', 'asc')
-  );
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const messages = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Message));
-      onSuccess(messages);
-    },
-    (error) => {
-      console.error('Error in messages listener:', error);
-      onError(error);
-    }
-  );
-};
-
-export const markMessagesAsRead = async (chatId: string, userId: string) => {
-  const messagesRef = collection(db, 'messages');
-  const unreadMessages = await getDocs(
-    query(
+// Get unread message count for a chat
+export const getUnreadMessageCount = async (chatId: string, userId: string) => {
+  try {
+    const messagesRef = collection(db, 'messages');
+    const q = query(
       messagesRef,
       where('chatId', '==', chatId),
       where('receiverId', '==', userId),
       where('read', '==', false)
-    )
-  );
-
-  const updatePromises = unreadMessages.docs.map(doc =>
-    updateDoc(doc.ref, { read: true })
-  );
-
-  await Promise.all(updatePromises);
+    );
+    
+    const snapshot = await getDocs(q);
+    return snapshot.size;
+  } catch (error) {
+    console.error('Error getting unread count:', error);
+    return 0;
+  }
 };

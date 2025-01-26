@@ -5,10 +5,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 const connectedUsers = new Map<string, WebSocket & { isInChat?: boolean }>();
 
 // Create WebSocket server instance
-const wss = new WebSocketServer({ 
-  clientTracking: true,
-  perMessageDeflate: false
-});
+let wss: WebSocketServer;
 
 export const handler = async (event: HandlerEvent, context: HandlerContext) => {
   // Verify WebSocket upgrade request
@@ -30,6 +27,13 @@ export const handler = async (event: HandlerEvent, context: HandlerContext) => {
       throw new Error('No WebSocket context available');
     }
 
+    // Initialize WebSocket server if not already created
+    if (!wss) {
+      wss = new WebSocketServer({ 
+        noServer: true
+      });
+    }
+
     wss.handleUpgrade(event.requestContext as any, websocket.socket, Buffer.alloc(0), (ws) => {
       const userId = crypto.randomUUID();
       connectedUsers.set(userId, ws);
@@ -40,7 +44,7 @@ export const handler = async (event: HandlerEvent, context: HandlerContext) => {
         userId
       }));
 
-      ws.on('message', (message: string) => {
+      ws.on('message', async (message: string) => {
         try {
           const data = JSON.parse(message.toString());
           
@@ -48,7 +52,7 @@ export const handler = async (event: HandlerEvent, context: HandlerContext) => {
             case 'find_peer':
               const availablePeer = Array.from(connectedUsers.entries())
                 .find(([id, socket]) => 
-                  id !== userId && 
+                  id !== userId &&
                   socket.readyState === WebSocket.OPEN &&
                   !socket.isInChat
                 );
@@ -56,7 +60,7 @@ export const handler = async (event: HandlerEvent, context: HandlerContext) => {
               if (availablePeer) {
                 const [peerId, peerSocket] = availablePeer;
                 
-                ws.isInChat = true;
+                ws.isInChat = true; 
                 peerSocket.isInChat = true;
 
                 ws.send(JSON.stringify({
@@ -86,15 +90,15 @@ export const handler = async (event: HandlerEvent, context: HandlerContext) => {
                 if (targetWs && targetWs.readyState === WebSocket.OPEN) {
                   targetWs.send(JSON.stringify({
                     type: data.type,
-                    [data.type]: data[data.type],
+                    data: data[data.type],
                     peerId: userId
-                  }));
+                  });
                 }
               }
               break;
           }
         } catch (error) {
-          console.error('Error handling message:', error);
+          console.error('Error handling WebSocket message:', error);
           ws.send(JSON.stringify({
             type: 'error',
             message: 'Failed to process message'
@@ -102,7 +106,7 @@ export const handler = async (event: HandlerEvent, context: HandlerContext) => {
         }
       });
 
-      ws.on('close', () => {
+      ws.on('close', async () => {
         // Notify peer if in chat
         if (ws.isInChat) {
           connectedUsers.forEach((socket, id) => {
@@ -115,6 +119,7 @@ export const handler = async (event: HandlerEvent, context: HandlerContext) => {
           });
         }
         connectedUsers.delete(userId);
+        console.log(`Client ${userId} disconnected`);
       });
     });
 
@@ -127,7 +132,7 @@ export const handler = async (event: HandlerEvent, context: HandlerContext) => {
       }
     };
   } catch (error) {
-    console.error('WebSocket setup error:', error);
+    console.error('WebSocket setup failed:', error);
     return {
       statusCode: 500,
       body: 'WebSocket setup failed',

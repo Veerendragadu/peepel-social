@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d62d6c" />
+      <stop offset="100%" style="stop-color:#5f2b8d" />
+    </linearGradient>
+  </defs>
+  <path d="M16 28C9.373 28 4 22.627 4 16C4 9.373 9.373 4 16 4C22.627 4 28 9.373 28 16C28 22.627 22.627 28 16 28ZM16 6C10.477 6 6 10.477 6 16C6 21.523 10.477 26 16 26C21.523 26 26 21.523 26 16C26 10.477 21.523 6 16 6Z" fill="url(#gradient)"/>
+  <path d="M16 22C13.791 22 12 20.209 12 18C12 15.791 13.791 14 16 14C18.209 14 20 15.791 20 18C20 20.209 18.209 22 16 22Z" fill="url(#gradient)"/>
+  <path d="M21 13C19.343 13 18 11.657 18 10C18 8.343 19.343 7 21 7C22.657 7 24 8.343 24 10C24 11.657 22.657 13 21 13Z" fill="url(#gradient)"/>
+  <path d="M11 13C9.343 13 8 11.657 8 10C8 8.343 9.343 7 11 7C12.657 7 14 8.343 14 10C14 11.657 12.657 13 11 13Z" fill="#d62d6c"/>
+</svg>

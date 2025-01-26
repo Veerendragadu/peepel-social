@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Heart, Users, AlertCircle } from 'lucide-react';
+import { Heart, Users, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, getFirestore } from 'firebase/firestore';
 import { useAuthStore } from '../store/authStore';
-import { auth } from '../lib/firebaseClient';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -16,28 +17,43 @@ export function LoginPage() {
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || !email || !password) return;
-    
+
     setLoading(true);
     setError(null);
 
     try {
+      // Sign in with Firebase Auth
+      const auth = getAuth();
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+
+      // Get user data from Firestore
+      const userDoc = await getDoc(doc(getFirestore(), 'users', userCredential.user.uid));
       
+      if (!userDoc.exists()) {
+        throw new Error('User data not found');
+      }
+
+      const userData = userDoc.data();
       login({
-        id: user.uid,
-        email: user.email!,
-        username: user.email!.split('@')[0],
-        name: user.displayName || user.email!.split('@')[0],
-        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${user.email}`,
-        walletBalance: 0,
-        isAdmin: false,
+        id: userCredential.user.uid,
+        email: userData.email,
+        username: userData.username,
+        name: userData.name,
+        avatar: userData.avatar,
+        walletBalance: userData.walletBalance || 0,
+        isAdmin: userData.isAdmin || false,
       });
 
       navigate('/');
     } catch (err) {
       console.error('Login error:', err);
-      setError('Invalid email or password');
+      if (err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed attempts. Please try again later.');
+      } else {
+        setError('Failed to sign in. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -89,19 +105,30 @@ export function LoginPage() {
               <Link
                 to="/reset-password"
                 className="text-sm text-primary hover:text-primary/90 transition-colors"
+                tabIndex={-1}
               >
                 Forgot Password?
               </Link>
             </div>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Enter your password"
-              required
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary pr-10"
+                placeholder="Enter your password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/40 hover:text-white/60 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <button

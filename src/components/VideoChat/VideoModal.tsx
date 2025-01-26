@@ -17,11 +17,11 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
   const [isSkipping, setIsSkipping] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [participants, setParticipants] = useState<{ id: string; stream: MediaStream }[]>([]);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
 
   const { 
     initializeConnection,
@@ -30,9 +30,9 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
     handleOffer,
     handleAnswer,
     handleIceCandidate
-  } = useWebRTC((stream) => {
+  } = useWebRTC((remoteStream) => {
     // Handle remote stream
-    setParticipants(prev => [...prev, { id: 'remote', stream }]);
+    setRemoteStream(remoteStream);
   });
 
   useEffect(() => {
@@ -53,8 +53,8 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
         case 'peer_found':
           // Initialize WebRTC connection when peer is found
           initializeConnection();
-          if (localStreamRef.current) {
-            await addLocalStream(localStreamRef.current);
+          if (localStream) {
+            await addLocalStream(localStream);
           }
           // Create and send offer if we're the initiator
           if (data.initiator) {
@@ -94,16 +94,6 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
       setHasError(false);
       setErrorMessage('');
 
-      // Check if permissions are already granted
-      const permissions = await navigator.mediaDevices.enumerateDevices();
-      const hasVideoPermission = permissions.some(device => device.kind === 'videoinput' && device.label);
-      const hasAudioPermission = permissions.some(device => device.kind === 'audioinput' && device.label);
-
-      if (!hasVideoPermission || !hasAudioPermission) {
-        // Request permissions explicitly
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      }
-
       await initializeMedia();
     } catch (error) {
       console.error('Permission error:', error);
@@ -129,14 +119,17 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
   const initializeMedia = async () => {
     try {
       // Stop any existing streams first
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
+      if (localVideoRef.current && localVideoRef.current.srcObject) {
+        const stream = localVideoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        localVideoRef.current.srcObject = null;
       }
 
+      console.log('Requesting media stream...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 },
           facingMode: "user",
           aspectRatio: { ideal: 16/9 }
         },
@@ -147,30 +140,32 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
         }
       });
 
-      // Store stream reference
-      localStreamRef.current = stream;
+      console.log('Media stream obtained:', stream);
+      // Store stream in state
+      setLocalStream(stream);
 
       // Set up local video immediately
       if (localVideoRef.current) {
+        console.log('Setting up local video element...');
+        // Ensure video element is properly configured
+        localVideoRef.current.playsInline = true;
+        localVideoRef.current.autoplay = true;
+        localVideoRef.current.muted = true;
         localVideoRef.current.srcObject = stream;
-        localVideoRef.current.muted = true; // Mute local video to prevent feedback
         
-        // Play the video
         try {
           await localVideoRef.current.play();
+          console.log('Local video playback started');
         } catch (error) {
           console.error('Error playing local video:', error);
           throw error;
         }
       }
 
-      // Update participants
-      setParticipants([{ id: 'local', stream }]);
-      
       // Short delay before marking as connected
       setTimeout(() => {
         setIsConnecting(false);
-      }, 500);
+      }, 1000);
 
     } catch (error) {
       console.error('Error accessing media devices:', error);
@@ -181,8 +176,8 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
 
   const cleanupMedia = () => {
     // Stop all tracks
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
         track.stop();
       });
     }
@@ -192,17 +187,16 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
       localVideoRef.current.srcObject = null;
     }
 
-    // Reset state
-    localStreamRef.current = null;
-    setParticipants([]);
+    setLocalStream(null);
+    setRemoteStream(null);
     setIsConnecting(true);
     setHasError(false);
     setErrorMessage('');
   };
 
   const toggleVideo = () => {
-    if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
         videoTrack.enabled = !isVideoOff;
         setIsVideoOff(!isVideoOff);
@@ -211,8 +205,8 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
   };
 
   const toggleAudio = () => {
-    if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !isMuted;
         setIsMuted(!isMuted);
@@ -229,22 +223,6 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
     setTimeout(() => {
       setIsSkipping(false);
     }, 2000);
-  };
-
-  const getGridLayout = () => {
-    const count = participants.length;
-    if (count <= 1) return 'grid-cols-1';
-    if (count === 2) return 'md:grid-cols-2';
-    if (count === 3) return 'md:grid-cols-3';
-    return 'md:grid-cols-2';
-  };
-
-  const getVideoBorderStyle = (participantId: string) => {
-    const count = participants.length;
-    if (count > 1) {
-      return 'border-2 border-red-500';
-    }
-    return 'border border-white/10';
   };
 
   if (!isOpen) return null;
@@ -290,28 +268,37 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
         ) : (
           <div className="relative h-full flex flex-col">
             {/* Videos Grid */}
-            <div className={`flex-1 grid ${getGridLayout()} gap-4 p-4`}>
-              {participants.map((participant) => (
-                <div 
-                  key={participant.id} 
-                  className={`relative aspect-video bg-black rounded-xl overflow-hidden shadow-lg ${getVideoBorderStyle(participant.id)}`}
-                >
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+              {/* Local Video */}
+              <div className="relative aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-white/10">
                   <video
-                    ref={participant.id === 'local' ? localVideoRef : undefined}
+                    ref={localVideoRef}
                     autoPlay
                     playsInline
-                    muted={participant.id === 'local'}
-                    className={`w-full h-full object-cover ${
-                      participant.id === 'local' ? 'transform scale-x-[-1]' : ''
-                    }`}
+                    muted
+                    className="w-full h-full object-cover transform scale-x-[-1]"
                   />
-                  {participant.id === 'local' && isVideoOff && (
+                  {isVideoOff && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                       <VideoOff className="w-12 h-12 text-white/50" />
                     </div>
                   )}
+                  <div className="absolute bottom-2 left-2 text-xs text-white/60 bg-black/50 px-2 py-1 rounded">
+                    Your Video
+                  </div>
+              </div>
+              
+              {/* Remote Video */}
+              {remoteStream && (
+                <div className="relative aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-white/10">
+                  <video
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                    srcObject={remoteStream}
+                  />
                 </div>
-              ))}
+              )}
             </div>
 
             {/* Control Bar */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
@@ -8,41 +8,55 @@ import { HomePage } from './pages/HomePage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AuthGuard } from './components/AuthGuard';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { LoadingScreen } from './components/LoadingScreen';
-import { auth } from './lib/firebaseClient';
-import { onAuthStateChanged } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './lib/firebaseClient';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
   const { login, logout, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
+    const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      try {
-        if (user) {
-          login({
-            id: user.uid,
-            email: user.email!,
-            username: user.email!.split('@')[0],
-            name: user.displayName || user.email!.split('@')[0],
-            avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${user.email}`,
-            walletBalance: 0,
-            isAdmin: false,
-          });
-        } else {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            login({
+              id: user.uid,
+              email: userData.email,
+              username: userData.username,
+              name: userData.name,
+              avatar: userData.avatar,
+              walletBalance: userData.walletBalance || 0,
+              isAdmin: userData.isAdmin || false,
+              following: userData.following || 0,
+              followers: userData.followers || 0,
+              bio: userData.bio || '',
+              phoneNumber: userData.phoneNumber || '',
+              createdAt: userData.createdAt || '',
+              updatedAt: userData.updatedAt || '',
+              isBanned: userData.isBanned || false
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
           logout();
         }
-      } catch (error) {
-        console.error('Error loading user data:', error);
+      } else {
         logout();
-      } finally {
-        setIsLoading(false);
       }
+      setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [login, logout]);
+  }, [login, logout, navigate]);
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -75,7 +89,7 @@ export default function App() {
             <ProfilePage />
           </AuthGuard>
         } />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </div>
   );

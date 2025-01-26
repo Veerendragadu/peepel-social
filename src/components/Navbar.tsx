@@ -1,23 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, User, LogOut, Video, MessageSquare, Heart, Users, Home } from 'lucide-react';
+import { Bell, User, Video, MessageSquare, Heart, Users, UserPlus } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
+import { useMessageStore } from '../store/messageStore';
 import { NotificationModal } from './Notifications/NotificationModal';
+import { FriendRequestModal } from './FriendRequest/FriendRequestModal';
 
 interface NavbarProps {
   onStartVideoChat: () => void;
   onOpenMessages: () => void;
+  onCloseMessages: () => void;
 }
 
-export function Navbar({ onStartVideoChat, onOpenMessages }: NavbarProps) {
+export function Navbar({ onStartVideoChat, onOpenMessages, onCloseMessages }: NavbarProps) {
   const [showHeart, setShowHeart] = useState(true);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [isFriendRequestModalOpen, setIsFriendRequestModalOpen] = useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
   const unreadCount = useNotificationStore((state) => state.unreadCount);
+  const unreadCounts = useMessageStore((state) => state.unreadCounts);
+
+  useEffect(() => {
+    // Check if there are any unread messages
+    const hasUnread = Object.values(unreadCounts).some(count => count > 0);
+    setHasUnreadMessages(hasUnread);
+  }, [unreadCounts]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -28,18 +39,14 @@ export function Navbar({ onStartVideoChat, onOpenMessages }: NavbarProps) {
 
   const isActive = (path: string) => location.pathname === path;
 
-  const handleLogout = () => {
-    logout();
-  };
-
-  const handleHomeClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    navigate('/', { replace: true });
-  };
-
   const handleLogoClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    navigate('/', { replace: true });
+    onCloseMessages();
+    navigate('/', { 
+      replace: true,
+      state: { scrollToWelcome: true }
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -47,10 +54,10 @@ export function Navbar({ onStartVideoChat, onOpenMessages }: NavbarProps) {
       <nav className="fixed top-0 left-0 right-0 bg-background/95 backdrop-blur-sm z-50 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
-            {/* Logo */}
+            {/* Logo - Now a button for better accessibility */}
             <button
               onClick={handleLogoClick}
-              className="flex items-center cursor-pointer z-50 hover:opacity-80 transition-opacity"
+              className="flex items-center cursor-pointer z-50 hover:opacity-80 transition-all transform hover:scale-105"
             >
               <div className="flex items-center group">
                 <div className="relative w-8 h-8 flex items-center justify-center">
@@ -71,18 +78,6 @@ export function Navbar({ onStartVideoChat, onOpenMessages }: NavbarProps) {
             {/* Navigation Items */}
             <div className="flex items-center space-x-4">
               <button
-                onClick={handleHomeClick}
-                className={`p-2 rounded-lg transition-colors ${
-                  location.pathname === '/'
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }`}
-                title="Home"
-              >
-                <Home className="w-5 h-5" />
-              </button>
-
-              <button
                 onClick={onStartVideoChat}
                 className="p-2 text-white/70 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
                 title="Video Chat"
@@ -92,10 +87,15 @@ export function Navbar({ onStartVideoChat, onOpenMessages }: NavbarProps) {
 
               <button
                 onClick={onOpenMessages}
-                className="p-2 text-white/70 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
+                className={`p-2 relative text-white/70 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${
+                  hasUnreadMessages ? 'text-primary' : ''
+                }`}
                 title="Messages"
               >
                 <MessageSquare className="w-5 h-5" />
+                {hasUnreadMessages && (
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
+                )}
               </button>
 
               <button
@@ -111,6 +111,14 @@ export function Navbar({ onStartVideoChat, onOpenMessages }: NavbarProps) {
                 )}
               </button>
 
+              <button
+                onClick={() => setIsFriendRequestModalOpen(true)}
+                className="p-2 text-white/70 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
+                title="Friend Requests"
+              >
+                <UserPlus className="w-5 h-5" />
+              </button>
+
               <div className="h-6 w-px bg-white/10" />
 
               <Link
@@ -124,14 +132,6 @@ export function Navbar({ onStartVideoChat, onOpenMessages }: NavbarProps) {
               >
                 <User className="w-5 h-5" />
               </Link>
-
-              <button
-                onClick={handleLogout}
-                className="p-2 text-white/70 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
-                title="Logout"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
             </div>
           </div>
         </div>
@@ -140,6 +140,10 @@ export function Navbar({ onStartVideoChat, onOpenMessages }: NavbarProps) {
       <NotificationModal
         isOpen={isNotificationModalOpen}
         onClose={() => setIsNotificationModalOpen(false)}
+      />
+      <FriendRequestModal
+        isOpen={isFriendRequestModalOpen}
+        onClose={() => setIsFriendRequestModalOpen(false)}
       />
     </>
   );

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Users, Ban, Edit, Trash2, Check, X, Search } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
 import { useAuthStore } from '../store/authStore';
 
 interface User {
@@ -28,42 +27,41 @@ export function AdminDashboard() {
   const checkAdminAndLoadUsers = async () => {
     try {
       if (!currentUser?.isAdmin) {
-        navigate('/');
+        navigate('/', { replace: true });
         return;
       }
 
-      await fetchUsers();
+      // Mock user data
+      setUsers([
+        {
+          id: '1',
+          username: 'admin',
+          email: 'admin@peepel.com',
+          is_admin: true,
+          is_banned: false,
+          created_at: new Date().toISOString(),
+          avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=admin'
+        },
+        {
+          id: '2',
+          username: 'user',
+          email: 'user@example.com',
+          is_admin: false,
+          is_banned: false,
+          created_at: new Date().toISOString(),
+          avatar_url: 'https://api.dicebear.com/7.x/initials/svg?seed=user'
+        }
+      ]);
+      setLoading(false);
     } catch (error) {
       console.error('Error checking admin status:', error);
       navigate('/');
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const toggleUserAdmin = async (userId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_admin: !currentStatus })
-        .eq('id', userId);
-
-      if (error) throw error;
-
+      // Mock toggle admin status
       setUsers(users.map(user => 
         user.id === userId ? { ...user, is_admin: !currentStatus } : user
       ));
@@ -74,13 +72,7 @@ export function AdminDashboard() {
 
   const toggleUserBan = async (userId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_banned: !currentStatus })
-        .eq('id', userId);
-
-      if (error) throw error;
-
+      // Mock toggle ban status
       setUsers(users.map(user => 
         user.id === userId ? { ...user, is_banned: !currentStatus } : user
       ));
@@ -95,12 +87,7 @@ export function AdminDashboard() {
     }
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', userId);
-
-      if (error) throw error;
+      // Mock delete user
       setUsers(users.filter(user => user.id !== userId));
     } catch (error) {
       console.error('Error deleting user:', error);

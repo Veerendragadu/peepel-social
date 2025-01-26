@@ -7,12 +7,12 @@ import rateLimit from 'express-rate-limit';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'node-turn';
 import { config } from 'dotenv';
-import path from 'path';
 
 config();
 
 const app = express();
 const server = http.createServer(app);
+const port = process.env.PORT || 3478;
 
 // Security middleware
 app.use(helmet());
@@ -37,7 +37,11 @@ app.get('*', (req, res) => {
 });
 
 // WebSocket server for signaling
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ 
+  server,
+  path: '/ws',
+  perMessageDeflate: false
+});
 
 // Track connected users
 const connectedUsers = new Map();
@@ -121,8 +125,8 @@ const turnServer = createServer({
 const PORT = process.env.PORT || 8080;
 const TURN_PORT = process.env.TURN_PORT || 3478;
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+server.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
 
 turnServer.start(() => {

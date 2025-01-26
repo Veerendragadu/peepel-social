@@ -6,6 +6,7 @@ import type { Message, Chat, User } from '../types';
 interface MessageState {
   chats: Chat[];
   messages: Record<string, Message[]>;
+  unreadCounts: Record<string, number>;
   activeChat: string | null;
   unreadMessages: Record<string, number>;
   loading: boolean;
@@ -14,6 +15,7 @@ interface MessageState {
   sendMessage: (chatId: string, content: string, senderId: string, receiverId: string) => Promise<void>;
   setChats: (chats: Chat[]) => void;
   setMessages: (chatId: string, messages: Message[]) => void;
+  updateUnreadCount: (chatId: string, count: number) => void;
   initializeChats: (userId: string) => () => void;
   initializeMessages: (chatId: string) => () => void;
   markChatAsRead: (chatId: string) => Promise<void>;
@@ -22,6 +24,7 @@ interface MessageState {
 export const useMessageStore = create<MessageState>((set, get) => ({
   chats: [],
   messages: {},
+  unreadCounts: {},
   activeChat: null,
   unreadMessages: {},
   loading: false,
@@ -32,6 +35,14 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     if (chatId) {
       get().markChatAsRead(chatId).catch(console.error);
     }
+  },
+  updateUnreadCount: (chatId, count) => {
+    set(state => ({
+      unreadCounts: {
+        ...state.unreadCounts,
+        [chatId]: count
+      }
+    }));
   },
 
   sendMessage: async (chatId, content, senderId, receiverId) => {

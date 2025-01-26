@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { Navbar } from '../components/Navbar';
-import { Post } from '../components/Post';
 import { useAuthStore } from '../store/authStore';
-import { usePostStore } from '../store/postStore';
 import { PreferenceModal } from '../components/VideoChat/PreferenceModal';
 import { CreateRoomModal } from '../components/VideoChat/CreateRoomModal';
 import { JoinRoomModal } from '../components/VideoChat/JoinRoomModal';
@@ -10,6 +8,8 @@ import { VideoModal } from '../components/VideoChat/VideoModal';
 import { MessagesModal } from '../components/Messages/MessagesModal';
 import { Users, UserPlus, Globe, Lock, Heart } from 'lucide-react';
 import { GoogleAds } from '../components/Ads/GoogleAds';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 
 export function HomePage() {
   const [isPreferenceModalOpen, setIsPreferenceModalOpen] = useState(false);
@@ -18,10 +18,34 @@ export function HomePage() {
   const [isVideoChatOpen, setIsVideoChatOpen] = useState(false);
   const [isMeetingStranger, setIsMeetingStranger] = useState(false);
   const [isMessagesModalOpen, setIsMessagesModalOpen] = useState(false);
-  const [currentRoomCode, setCurrentRoomCode] = useState<string | null>(null);
   
-  const posts = usePostStore((state) => state.posts);
+  // Listen for openMessages event
+  useEffect(() => {
+    const handleOpenMessages = () => {
+      setIsMessagesModalOpen(true);
+    };
+
+    window.addEventListener('openMessages', handleOpenMessages);
+    return () => window.removeEventListener('openMessages', handleOpenMessages);
+  }, []);
+  
   const user = useAuthStore((state) => state.user);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Scroll to top when location changes
+  useEffect(() => {
+    if (location.state?.scrollToWelcome) {
+      const welcomeSection = document.getElementById('welcome-section');
+      if (welcomeSection) {
+        welcomeSection.scrollIntoView({ behavior: 'smooth' });
+      }
+      // Clear the state to prevent scrolling on subsequent renders
+      navigate(location.pathname, { replace: true, state: {} });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [location]);
 
   const handleCreateRoom = () => {
     setIsPreferenceModalOpen(false);
@@ -41,14 +65,12 @@ export function HomePage() {
 
   const handleRoomCreated = (roomName: string, roomCode: string, maxParticipants: number, privacy: 'public' | 'private') => {
     setIsCreateRoomModalOpen(false);
-    setCurrentRoomCode(roomCode);
     setIsMeetingStranger(false);
     setIsVideoChatOpen(true);
   };
 
   const handleJoinExistingRoom = (roomCode: string) => {
     setIsJoinRoomModalOpen(false);
-    setCurrentRoomCode(roomCode);
     setIsMeetingStranger(false);
     setIsVideoChatOpen(true);
   };
@@ -58,6 +80,7 @@ export function HomePage() {
       <Navbar 
         onStartVideoChat={() => setIsPreferenceModalOpen(true)}
         onOpenMessages={() => setIsMessagesModalOpen(true)}
+        onCloseMessages={() => setIsMessagesModalOpen(false)}
       />
       
       {/* Only show main content when messages modal is closed */}
@@ -66,9 +89,9 @@ export function HomePage() {
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Main Content */}
-              <div className="lg:col-span-8">
+              <div className="lg:col-span-12">
                 {/* Welcome Section - Always visible */}
-                <div className="mb-8 text-center">
+                <div id="welcome-section" className="mb-8 text-center">
                   <div className="inline-flex items-center justify-center group">
                     <div className="relative w-16 h-16 flex items-center justify-center">
                       <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-500 animate-pulse">
@@ -132,24 +155,6 @@ export function HomePage() {
                     <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-secondary/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </button>
                 </div>
-
-                {/* Posts Feed */}
-                <div className="space-y-4">
-                  {posts.map(post => (
-                    <Post
-                      key={post.id}
-                      post={post}
-                      user={user!}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Right Sidebar */}
-              <div className="lg:col-span-4">
-                <div className="sticky top-24">
-                  {/* Additional content can go here */}
-                </div>
               </div>
             </div>
           </div>
@@ -181,7 +186,6 @@ export function HomePage() {
         isOpen={isVideoChatOpen}
         onClose={() => {
           setIsVideoChatOpen(false);
-          setCurrentRoomCode(null);
         }}
         isMeetingStranger={isMeetingStranger}
       />

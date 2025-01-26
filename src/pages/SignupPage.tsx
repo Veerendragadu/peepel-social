@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Heart, Users, AlertCircle } from 'lucide-react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { Heart, Users, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebaseClient';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { isUsernameAvailable } from '../services/userService';
 
 interface FormData {
@@ -11,6 +11,14 @@ interface FormData {
   password: string;
   confirmPassword: string;
   username: string;
+  phoneNumber: string;
+  countryCode: string;
+}
+
+interface CountryCode {
+  code: string;
+  name: string;
+  dial_code: string;
 }
 
 export function SignupPage() {
@@ -18,13 +26,33 @@ export function SignupPage() {
     email: '',
     password: '',
     confirmPassword: '',
-    username: ''
+    username: '',
+    phoneNumber: '',
+    countryCode: '+1' // Default to US
   });
+
+  const [countryCodes] = useState<CountryCode[]>([
+    { code: "US", name: "United States", dial_code: "+1" },
+    { code: "GB", name: "United Kingdom", dial_code: "+44" },
+    { code: "IN", name: "India", dial_code: "+91" },
+    { code: "CA", name: "Canada", dial_code: "+1" },
+    { code: "AU", name: "Australia", dial_code: "+61" },
+    { code: "DE", name: "Germany", dial_code: "+49" },
+    { code: "FR", name: "France", dial_code: "+33" },
+    { code: "IT", name: "Italy", dial_code: "+39" },
+    { code: "ES", name: "Spain", dial_code: "+34" },
+    { code: "BR", name: "Brazil", dial_code: "+55" },
+  ]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const generateSearchTerms = (username: string): string[] => {
     const terms = new Set<string>();
@@ -48,34 +76,46 @@ export function SignupPage() {
     return Array.from(terms);
   };
 
+  const validatePhoneNumber = (phone: string) => {
+    const phoneRegex = /^\d{10}$/;
+    return phoneRegex.test(phone);
+  };
+
   const handleUsernameChange = async (username: string) => {
     setFormData(prev => ({ ...prev, username }));
     setError(null);
+    setUsernameError(null);
     setUsernameAvailable(null);
+    setCheckingUsername(false);
 
-    // Don't check if username is empty or too short
-    if (!username || username.length < 3) {
-      setError('Username must be at least 3 characters long');
+    const trimmedUsername = username.trim();
+    console.log('Checking username:', trimmedUsername);
+
+    if (!trimmedUsername || trimmedUsername.length < 3) {
+      setUsernameError('Username must be at least 3 characters long');
       return;
     }
 
-    // Check for valid characters first
-    if (!/^[a-z0-9_]+$/i.test(username)) {
-      setError('Username can only contain letters, numbers, and underscores');
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
+      setUsernameError('Username can only contain letters, numbers, and underscores');
       return;
     }
 
     setCheckingUsername(true);
     try {
-      const available = await isUsernameAvailable(username);
+      const available = await isUsernameAvailable(trimmedUsername);
+      console.log('Username availability result:', available);
+      console.log('Username availability result:', available);
       setUsernameAvailable(available);
       if (!available) {
-        setError('Username is already taken');
+        setUsernameError('Username is already taken');
+      } else {
+        setUsernameError(null);
       }
-    } catch (err) {
-      // Don't show error for availability check failures
-      console.error('Error checking username:', err);
-      setUsernameAvailable(null);
+    } catch (error) {
+      console.error('Error checking username:', error);
+      setUsernameError('An error occurred while checking username availability');
+      setUsernameAvailable(false);
     } finally {
       setCheckingUsername(false);
     }
@@ -84,13 +124,15 @@ export function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
+    
+    const trimmedUsername = formData.username.trim();
 
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
 
-    if (!formData.username) {
+    if (!trimmedUsername) {
       setError('Username is required');
       return;
     }
@@ -100,51 +142,53 @@ export function SignupPage() {
       return;
     }
 
+    if (!validatePhoneNumber(formData.phoneNumber)) {
+      setError('Please enter a valid 10-digit phone number');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
       // Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
-        auth,
+        getAuth(),
         formData.email,
         formData.password
       );
 
-      const userId = userCredential.user.uid;
-      const username = formData.username.toLowerCase();
-
-      // Generate search terms for the username
-      const searchTerms = generateSearchTerms(username);
-
       // Create user document in Firestore
-      const userDocRef = doc(db, 'users', userId);
-      await setDoc(userDocRef, {
+      const userData = {
         email: formData.email,
-        username,
-        name: formData.username,
-        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${username}`,
-        searchTerms,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        id: userCredential.user.uid,
+        username: trimmedUsername.toLowerCase(),
+        phoneNumber: `${formData.countryCode}${formData.phoneNumber}`,
+        name: trimmedUsername,
+        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${trimmedUsername}`,
         isAdmin: false,
         isBanned: false,
-        following: 0,
-        followers: 0,
-        bio: '',
-        walletBalance: 0
-      });
+        createdAt: new Date().toISOString(),
+        searchTerms: generateSearchTerms(trimmedUsername)
+      };
 
-      await updateProfile(userCredential.user, {
-        displayName: formData.username,
-        photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${username}`
-      });
+      await setDoc(doc(db, 'users', userCredential.user.uid), userData);
+      await setDoc(doc(getFirestore(), 'users', userCredential.user.uid), userData);
 
-      // Redirect to login page
-      navigate('/login');
+      // Navigate to login with success message
+      navigate('/login', {
+        state: {
+          message: 'Account created successfully! Please sign in to continue.'
+        },
+        replace: true
+      });
     } catch (err) {
       console.error('Signup error:', err);
-      setError('Failed to create account. Email might be already in use.');
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Email is already in use');
+      } else {
+        setError('Failed to create account. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -193,11 +237,60 @@ export function SignupPage() {
                 placeholder="Choose a username"
                 required
               />
+              {usernameError && (
+                <p className="mt-1 text-sm text-red-500">{usernameError}</p>
+              )}
               {checkingUsername && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                   <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Phone Number
+              </label>
+              <div className="flex space-x-2">
+                <select
+                  value={formData.countryCode}
+                  onChange={(e) => setFormData({ ...formData, countryCode: e.target.value })}
+                  className="w-32 px-3 py-2 bg-background border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundPosition: 'right 0.5rem center',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundSize: '1.5em 1.5em',
+                    paddingRight: '2.5rem'
+                  }}
+                >
+                  {countryCodes.map((country) => (
+                    <option
+                      key={country.code}
+                      value={country.dial_code}
+                      className="bg-background text-white"
+                    >
+                      {country.name} ({country.dial_code})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  value={formData.phoneNumber}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setFormData({ ...formData, phoneNumber: value });
+                  }}
+                  placeholder="Phone Number"
+                  className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary"
+                  required
+                />
+              </div>
+              <p className="mt-1 text-sm text-white/60">
+                Enter your 10-digit phone number without spaces or dashes
+              </p>
             </div>
           </div>
 
@@ -220,30 +313,58 @@ export function SignupPage() {
             <label htmlFor="password" className="block text-sm font-medium text-white/80 mb-2">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Create a password"
-              required
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary pr-10"
+                placeholder="Create a password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/40 hover:text-white/60 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-white/60">
+              Password must contain:
+              <span className="block ml-2">• At least 8 characters</span>
+              <span className="block ml-2">• One uppercase letter</span>
+              <span className="block ml-2">• One lowercase letter</span>
+              <span className="block ml-2">• One number</span>
+              <span className="block ml-2">• One special character (!@#$%^&*)</span>
+            </p>
           </div>
 
           <div>
             <label htmlFor="confirmPassword" className="block text-sm font-medium text-white/80 mb-2">
               Confirm Password
             </label>
-            <input
-              id="confirmPassword"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Confirm your password"
-              required
-            />
+            <div className="relative">
+              <input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary pr-10"
+                placeholder="Confirm your password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-white/40 hover:text-white/60 transition-colors"
+                tabIndex={-1}
+              >
+                {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <button

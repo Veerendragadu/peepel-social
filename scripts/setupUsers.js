@@ -3,13 +3,13 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCQDdZen0qOYBgt6Lf_Zf9TOrBAgM57930",
-  authDomain: "peepel-social.firebaseapp.com",
-  projectId: "peepel-social",
-  storageBucket: "peepel-social.firebasestorage.app",
-  messagingSenderId: "911063586413",
-  appId: "1:911063586413:web:c897002440faaa6fb7d164",
-  measurementId: "G-G6MC1JRYG2"
+  apiKey: "AIzaSyBdSJT389wassNsm4oj7ImtkJ6yoSOfv8g",
+  authDomain: "peepelmedia.firebaseapp.com",
+  projectId: "peepelmedia",
+  storageBucket: "peepelmedia.appspot.com",
+  messagingSenderId: "615346899406",
+  appId: "1:615346899406:web:37c02fda617815a477439f",
+  measurementId: "G-14LFVYFWHN"
 };
 
 // Initialize Firebase

@@ -3,6 +3,7 @@
 export interface User {
   id: string;
   email: string;
+  phoneNumber: string;
   username: string;
   name: string;
   avatar: string;
@@ -14,6 +15,11 @@ export interface User {
   walletBalance: number;
   createdAt: string;
   updatedAt: string;
+  friends?: string[];
+  friendRequests?: {
+    sent: string[];
+    received: string[];
+  };
 }
 
 export interface FriendRequest {
@@ -22,6 +28,9 @@ export interface FriendRequest {
   receiverId: string;
   status: 'pending' | 'accepted' | 'rejected';
   createdAt: string;
+  updatedAt?: string;
+  sender?: User;
+  receiver?: User;
 }
 
 export interface Message {

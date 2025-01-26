@@ -50,12 +50,12 @@ export function Post({ post, user }: PostProps) {
 
   return (
     <div className="bg-background/50 backdrop-blur-sm border border-white/10 rounded-xl p-4 mb-4">
-      <div className="flex items-center mb-4">
+      <div className="flex items-start md:items-center mb-4">
         <Link to={`/profile/${user.username}`}>
           <img
             src={user.avatar}
             alt={user.name}
-            className="w-10 h-10 rounded-full object-cover ring-2 ring-primary/20"
+            className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover ring-2 ring-primary/20"
           />
         </Link>
         <div className="ml-3">
@@ -77,7 +77,7 @@ export function Post({ post, user }: PostProps) {
       {post.media && post.media.length > 0 && (
         <div className={`mb-4 grid gap-2 ${
           post.media.length > 1 ? 'grid-cols-2' : 'grid-cols-1'
-        }`}>
+        } max-h-[500px]`}>
           {post.media.map((media, index) => (
             <div 
               key={index} 
@@ -88,7 +88,7 @@ export function Post({ post, user }: PostProps) {
                 <img
                   src={media.url}
                   alt={`Post media ${index + 1}`}
-                  className="rounded-lg w-full h-full object-cover"
+                  className="rounded-lg w-full h-full object-cover max-h-[500px]"
                 />
               ) : (
                 <video
@@ -103,7 +103,7 @@ export function Post({ post, user }: PostProps) {
       )}
       
       <div className="flex items-center justify-between text-white/60">
-        <button
+        <button 
           onClick={handleLike}
           className={`flex items-center space-x-2 transition-colors ${
             liked ? 'text-primary' : 'hover:text-primary'
