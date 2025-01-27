@@ -1,24 +1,19 @@
-import React, { useState } from 'react';
-import { Navbar } from '../components/Navbar';
-import { useAuthStore } from '../store/authStore';
-import { PreferenceModal } from '../components/VideoChat/PreferenceModal';
-import { CreateRoomModal } from '../components/VideoChat/CreateRoomModal';
-import { JoinRoomModal } from '../components/VideoChat/JoinRoomModal';
-import { VideoModal } from '../components/VideoChat/VideoModal';
-import { MessagesModal } from '../components/Messages/MessagesModal';
 import { Users, UserPlus, Globe, Lock, Heart } from 'lucide-react';
 import { GoogleAds } from '../components/Ads/GoogleAds';
+import { StrangerVideoChat } from '../components/VideoChat/StrangerVideoChat';
+import { Navbar } from '../components/Navbar';
+import { useState, useEffect } from 'react';
+import { useAuthStore } from '../store/authStore';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { MessagesModal } from '../components/Messages/MessagesModal';
 
 export function HomePage() {
-  const [isPreferenceModalOpen, setIsPreferenceModalOpen] = useState(false);
-  const [isCreateRoomModalOpen, setIsCreateRoomModalOpen] = useState(false);
-  const [isJoinRoomModalOpen, setIsJoinRoomModalOpen] = useState(false);
-  const [isVideoChatOpen, setIsVideoChatOpen] = useState(false);
-  const [isMeetingStranger, setIsMeetingStranger] = useState(false);
+  const [isStrangerChatOpen, setIsStrangerChatOpen] = useState(false);
   const [isMessagesModalOpen, setIsMessagesModalOpen] = useState(false);
-  
+  const user = useAuthStore((state) => state.user);
+  const location = useLocation();
+  const navigate = useNavigate();
+
   // Listen for openMessages event
   useEffect(() => {
     const handleOpenMessages = () => {
@@ -28,10 +23,6 @@ export function HomePage() {
     window.addEventListener('openMessages', handleOpenMessages);
     return () => window.removeEventListener('openMessages', handleOpenMessages);
   }, []);
-  
-  const user = useAuthStore((state) => state.user);
-  const location = useLocation();
-  const navigate = useNavigate();
 
   // Scroll to top when location changes
   useEffect(() => {
@@ -45,40 +36,11 @@ export function HomePage() {
     } else {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [location]);
-
-  const handleCreateRoom = () => {
-    setIsPreferenceModalOpen(false);
-    setIsCreateRoomModalOpen(true);
-  };
-
-  const handleJoinRoom = () => {
-    setIsPreferenceModalOpen(false);
-    setIsJoinRoomModalOpen(true);
-  };
-
-  const handleMeetStranger = () => {
-    setIsPreferenceModalOpen(false);
-    setIsMeetingStranger(true);
-    setIsVideoChatOpen(true);
-  };
-
-  const handleRoomCreated = (roomName: string, roomCode: string, maxParticipants: number, privacy: 'public' | 'private') => {
-    setIsCreateRoomModalOpen(false);
-    setIsMeetingStranger(false);
-    setIsVideoChatOpen(true);
-  };
-
-  const handleJoinExistingRoom = (roomCode: string) => {
-    setIsJoinRoomModalOpen(false);
-    setIsMeetingStranger(false);
-    setIsVideoChatOpen(true);
-  };
+  }, [location, navigate]);
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar 
-        onStartVideoChat={() => setIsPreferenceModalOpen(true)}
         onOpenMessages={() => setIsMessagesModalOpen(true)}
         onCloseMessages={() => setIsMessagesModalOpen(false)}
       />
@@ -107,7 +69,7 @@ export function HomePage() {
                 <div className="space-y-6 mb-12">
                   {/* Meet Stranger */}
                   <button
-                    onClick={handleMeetStranger}
+                    onClick={() => setIsStrangerChatOpen(true)}
                     className="w-full group relative overflow-hidden rounded-2xl bg-gradient-to-br from-secondary/20 to-primary/20 border border-white/10 p-8 transition-all hover:shadow-lg hover:border-white/20"
                   >
                     <div className="relative z-10">
@@ -132,7 +94,7 @@ export function HomePage() {
 
                   {/* Create Chat Room */}
                   <button
-                    onClick={handleCreateRoom}
+                    onClick={() => {}}
                     className="w-full group relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-white/10 p-8 transition-all hover:shadow-lg hover:border-white/20"
                   >
                     <div className="relative z-10">
@@ -161,35 +123,11 @@ export function HomePage() {
         </main>
       )}
 
-      {/* Modals */}
-      <PreferenceModal
-        isOpen={isPreferenceModalOpen}
-        onClose={() => setIsPreferenceModalOpen(false)}
-        onCreateRoom={handleCreateRoom}
-        onMeetStranger={handleMeetStranger}
-        onJoinRoom={handleJoinRoom}
+      <StrangerVideoChat
+        isOpen={isStrangerChatOpen}
+        onClose={() => setIsStrangerChatOpen(false)}
       />
-
-      <CreateRoomModal
-        isOpen={isCreateRoomModalOpen}
-        onClose={() => setIsCreateRoomModalOpen(false)}
-        onCreateRoom={handleRoomCreated}
-      />
-
-      <JoinRoomModal
-        isOpen={isJoinRoomModalOpen}
-        onClose={() => setIsJoinRoomModalOpen(false)}
-        onJoinRoom={handleJoinExistingRoom}
-      />
-
-      <VideoModal
-        isOpen={isVideoChatOpen}
-        onClose={() => {
-          setIsVideoChatOpen(false);
-        }}
-        isMeetingStranger={isMeetingStranger}
-      />
-
+      
       <MessagesModal
         isOpen={isMessagesModalOpen}
         onClose={() => setIsMessagesModalOpen(false)}

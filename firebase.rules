@@ -1,12 +1,19 @@
+// Firestore Rules
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Base rules for authenticated users
+    match /{document=**} {
+      allow read: if isAuthenticated();
     }
 
     match /users/{userId} {

@@ -1,14 +1,57 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
   ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF ./package-lock.json"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["dist/**"]
+  external_node_modules = ["ws", "bufferutil", "utf-8-validate"]
+  directory = "netlify/functions"
+  included_files = ["dist/**"]
+  # Set region to match your site's region
+  region = "us-east-2"
+  # Increase timeout for WebSocket connections
+  timeout = 60
+  [functions.websocket]
+    maxDuration = 300
+
+# WebSocket function path
+[[redirects]]
+  from = "/.netlify/functions/websocket"
+  to = "/.netlify/functions/websocket"
+  status = 200
+  force = true
+  [redirects.headers]
+    X-From = "Netlify"
+    Connection = "upgrade"
+    Upgrade = "websocket"
+    Sec-WebSocket-Protocol = "websocket"
+    Sec-WebSocket-Version = "13"
+    # Add WebSocket-specific headers
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization, Connection, Upgrade, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Protocol"
+    Access-Control-Max-Age = "86400"
+    Keep-Alive = "timeout=30, max=1000"
+
+# TURN server configuration
+[functions.websocket.environment]
+  XIRSYS_DOMAIN = "peepel"
+  XIRSYS_API_KEY = "${XIRSYS_API_KEY}"
+  XIRSYS_API_URL = "https://global.xirsys.net/_turn"
+  XIRSYS_CHANNEL = "peepel-video"
+  XIRSYS_IDENT = "peepel"
+  XIRSYS_SECRET = "${XIRSYS_SECRET}"
+  STUN_SERVERS = "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302,stun:stun2.l.google.com:19302,stun:stun3.l.google.com:19302,stun:stun4.l.google.com:19302"
 
 # Handle client-side routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-  
+
 [context.deploy-preview]
   command = "npm run build"
   publish = "dist"
@@ -22,6 +65,7 @@
 [build.environment]
   NODE_VERSION = "20"
   CI = "true"
+  NODE_OPTIONS = "--max_old_space_size=4096"
   FIREBASE_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDlfNtBEF43KQpu\nEnwdYclyU1VjB2BHG5DGzBVg7sEy2C4mIfMW0yCMgTfYYm8UP+UF2GO0nmJTPNiJ\nTk1coBbF8wZ2MMIoIM4OCAp5xL0wLsTHUU9jqL1jPMT1Dzg6EuMa7Ga4NQuRA0b2\n2Fg/lIC6XtlXbLyErn0mvyOFwfBYff7Hheei8bjf+A0/yHXylrdDgQJQYUvuHB7o\n9tAu+32KaCSSlIH7ZtsE6/8FLSRK59Gf0Jha2ElHdN/jJ/dC0zeWckiOVYVCEXr3\n4kGPcA7bpU/hnwCaSdqT8WvZJobHFTbHnaOL769aMCMEVegYPKRkeR5vMBAdYCwU\nAVXhG8i9AgMBAAECggEACQDh0toP8dB4yeJZX227hL8jb0P8awD4Qe4DCLW7rrSW\nJ7jW2+Mv0iAsglJnH6XbsZcDxZpRKtYNFZX7QwVxrBWuZmsTTJYjTDmhVfwTnOHs\nDN9yL4Uqdcva9Lv1ul5ZuqMVUWgDXcHn9T2xRXO2Esz8PSNu+5jWho0JMvFtuvFj\nfOcbuu0Frj9245mpz80ibO354rr3RXZ59rz4alqOw9gZiCUOyRw9T4TCDrHZMP7+\nax+zfmR1PM1yKEmXNmJVDPQml6rvKAhoZq1yOM+Y6Vc+6dyTcdvK0YeiIvzb9OK4\nyjbn+m3PJdZXHvH1xIfhOWo0UUZi93+uo/Nuhv2XoQKBgQD8KMyO+vueNubBIe5l\nf3LAuMtcd/NqvomSydTbQzkXaHaMqJi9uWDIplQ2/0960TiTh3mhFWdq30Fl3FQ2\nV0hz8EnrWU7rwMwvi1wDrMkzs/NFdr3F+/hT+p/29v4ke+XnBdKzMDNV/aT3SeMn\n/Z3JjHbLbH0d67F7feDomfdFOwKBgQDo+6hlrPvwHplO/16z6H4Q8J+fZyjchfrJ\n49GXy8MVhmrszFWPjTtvql/eTNhBze/6VvlGKCJKITQO4dB1QO8aD/l+mWTdZClf\nllEasZCKnRYOxInhZ8DkDsyNJ7a/JyeT7NW2Zf379yiL5iYiYoqHPXZdBNG/RLG+\nFYWn+pXqZwKBgQDz3S0/1iED+Qqfm4YoKOK82brq2aLTCCSajpFJ4DBVoBSOofrd\n+WtNgfaOHcoq+C5kFzAdBks3A2UG8teKmk0auzdx4bQ+sf2GuZsqfq8zToQmGNkd\noTqfVRHhUSul8yD7lRkZbLMpJZ2l/pIuOcuggTTeNTSnfCrwSGP77/NAwwKBgQCZ\nR8BhrG5QawE4HQDEYmhWYsjRyb/zXd5CZzUkpjUh+z5rrn94I1YAQFo0WeBJYuDI\nleIISy1MEg464EwSaHcmcW4W4XqfwV8K+U1Av6O13mV9r8Z62pToNehT0dYEaxE5\n3C46g12XIOO3LuLV6njzQveVeS85pEtAIM6/Vji9bwKBgCwNttiUPrf1ts5w6KBe\nD8Rda8K6KgZ1UJyqiMnd/Plc+uUxtxwZ0ymsmUkivT2jfrHXFQ54KfF7TpOj6Zdu\nY5NkBYnyoxgaVH94fqHdAphUbxes6mnUbLvfshinXuUeOyyXz7KsgIZf5bSMB1ss\nqtAkHte/6ZGQh0tm7ccQqZd4\n-----END PRIVATE KEY-----\n"
   ABLY_API_KEY = "zqOS-Q.3Ln0KA:KT7z1oyr6SXRo2-BDY4i852lQp_8JMZTcryej8d3o2g"
   NPM_FLAGS = "--no-audit --no-fund"
@@ -39,8 +83,10 @@
   [headers.values]
     Access-Control-Allow-Origin = "*"
     Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers = "X-Requested-With, Content-Type, Authorization"
+    Access-Control-Allow-Credentials = "true"
     Permissions-Policy = "camera=self microphone=self display-capture=self"
-    Content-Security-Policy = "default-src 'self'; connect-src 'self' wss: https: *.firebaseio.com *.googleapis.com; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; frame-ancestors 'none';"
+    Content-Security-Policy = "default-src 'self'; connect-src 'self' wss: https: *.firebaseio.com *.googleapis.com *.netlify.app; media-src 'self' blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; frame-ancestors 'none';"
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Content-Type-Options = "nosniff"
-    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"

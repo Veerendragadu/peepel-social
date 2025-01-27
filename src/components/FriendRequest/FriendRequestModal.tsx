@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Check, UserPlus, AlertCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
@@ -16,6 +16,26 @@ export function FriendRequestModal({ isOpen, onClose }: FriendRequestModalProps)
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const user = useAuthStore((state) => state.user);
+
+  // Handle history state for back button
+  useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ modal: 'friendrequest' }, '');
+    }
+
+    const handlePopState = () => {
+      if (window.history.state?.modal === 'friendrequest') {
+        // Prevent default back behavior
+        window.history.pushState({ modal: 'friendrequest' }, '');
+      } else {
+        // Close modal if we're going back from the initial state
+        onClose();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!user) return;

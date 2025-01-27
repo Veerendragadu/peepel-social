@@ -21,6 +21,7 @@ export function ProfilePage() {
   const [friends, setFriends] = useState<User[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(true);
   const [showFriendList, setShowFriendList] = useState(false);
+  const [uniqueFriends, setUniqueFriends] = useState<Map<string, User>>(new Map());
   
   const posts = usePostStore((state) => 
     state.posts.filter((post) => post.userId === (profileUser?.id || currentUser?.id))
@@ -30,12 +31,28 @@ export function ProfilePage() {
     const loadFriends = async () => {
       if (!profileUser && !currentUser) return;
       setLoadingFriends(true);
+      console.log('Loading friends...');
       try {
         const userId = profileUser?.id || currentUser?.id;
         if (!userId) return;
 
         const friendsList = await getFriends(userId);
-        setFriends(friendsList);
+        console.log('Raw friends list:', friendsList);
+        
+        // Create a Map to ensure unique friends by ID
+        const uniqueFriendsMap = new Map<string, User>();
+        friendsList.forEach(friend => {
+          if (!uniqueFriendsMap.has(friend.id)) {
+            console.log('Adding unique friend:', friend.id, friend.username);
+            uniqueFriendsMap.set(friend.id, friend);
+          } else {
+            console.log('Skipping duplicate friend:', friend.id, friend.username);
+          }
+        });
+        setUniqueFriends(uniqueFriendsMap);
+        const uniqueFriendsList = Array.from(uniqueFriendsMap.values());
+        console.log('Final unique friends list:', uniqueFriendsList);
+        setFriends(uniqueFriendsList);
       } catch (error) {
         console.error('Error loading friends:', error);
       } finally {
@@ -97,12 +114,24 @@ export function ProfilePage() {
     }
   };
 
-  const handleMessage = (friend: User) => {
-    // Trigger message modal with selected friend
-    const event = new CustomEvent('openMessagesWith', { 
-      detail: { user: friend }
+  const handleMessage = (friend: User, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Close friend list first to prevent UI conflicts
+    setShowFriendList(false);
+    
+    console.log('Opening chat with friend:', friend);
+    
+    // Use requestAnimationFrame to ensure UI is updated before dispatching
+    requestAnimationFrame(() => {
+      const event = new CustomEvent('openMessagesWith', {
+        detail: { user: friend },
+        bubbles: false,
+        cancelable: true
+      });
+      window.dispatchEvent(event);
     });
-    window.dispatchEvent(event);
   };
 
   if (loading) return <div className="min-h-screen bg-background pt-24 flex items-center justify-center"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
@@ -200,7 +229,10 @@ export function ProfilePage() {
                 ) : friends.length > 0 ? (
                   <div className="space-y-4">
                     {friends.map((friend) => (
-                      <div key={friend.id} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
+                      <div 
+                        key={`friend-${friend.id}-${friend.username}`} 
+                        className="flex items-center justify-between p-4 bg-white/5 rounded-lg"
+                      >
                         <div className="flex items-center space-x-3">
                           <img
                             src={friend.avatar}
@@ -213,9 +245,15 @@ export function ProfilePage() {
                           </div>
                         </div>
                         <button
-                          onClick={() => handleMessage(friend)}
+                          onClick={(e) => handleMessage(friend, e)}
+                          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onMouseUp={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); }}
                           className="p-2 hover:bg-white/10 rounded-lg text-white/70 hover:text-white transition-colors"
                           title="Send message"
+                          type="button"
+                          style={{ pointerEvents: 'auto' }}
                         >
                           <MessageSquare className="w-5 h-5" />
                         </button>

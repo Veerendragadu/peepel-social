@@ -1,128 +1,80 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Video, VideoOff, Mic, MicOff, PhoneOff, SkipForward, Camera } from 'lucide-react';
-import { useWebRTC } from '../../services/webrtcService';
-import { signalingService } from '../../services/signalingService';
+import { Video, VideoOff, Mic, MicOff, PhoneOff, Camera } from 'lucide-react';
 
 interface VideoChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  isMeetingStranger?: boolean;
-  maxParticipants?: number;
 }
 
-export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxParticipants = 4 }: VideoChatModalProps) {
-  const [isConnecting, setIsConnecting] = useState(true);
+export function VideoModal({ isOpen, onClose }: VideoChatModalProps) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [isSkipping, setIsSkipping] = useState(false);
-  const [hasError, setHasError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  
-  const containerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
-
-  const { 
-    initializeConnection,
-    addLocalStream,
-    createOffer,
-    handleOffer,
-    handleAnswer,
-    handleIceCandidate
-  } = useWebRTC((remoteStream) => {
-    // Handle remote stream
-    setRemoteStream(remoteStream);
-  });
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      requestMediaPermissions();
-      signalingService.connect();
-      signalingService.onMessage(handleSignalingMessage);
+      initializeCamera();
+      setIsInitializing(true);
+      setIsVideoReady(false);
     }
     return () => {
       cleanupMedia();
-      signalingService.disconnect();
     };
   }, [isOpen]);
 
-  const handleSignalingMessage = async (data: any) => {
+  // Update loading state when stream is ready
+  useEffect(() => {
+    if (localStream) {
+      setTimeout(() => {
+        setIsLoading(false);
+        setIsInitializing(false);
+      }, 1000);
+    }
+  }, [localStream]);
+
+  // Handle video element events
+  useEffect(() => {
+    const videoElement = localVideoRef.current;
+    if (!videoElement) return;
+
+    const handleCanPlay = () => {
+      console.log('Video can play');
+      setIsVideoReady(true);
+    };
+
+    videoElement.addEventListener('canplay', handleCanPlay);
+    return () => videoElement.removeEventListener('canplay', handleCanPlay);
+  }, []);
+
+  const initializeCamera = async () => {
     try {
-      switch (data.type) {
-        case 'peer_found':
-          // Initialize WebRTC connection when peer is found
-          initializeConnection();
-          if (localStream) {
-            await addLocalStream(localStream);
-          }
-          // Create and send offer if we're the initiator
-          if (data.initiator) {
-            const offer = await createOffer();
-            if (offer) {
-              signalingService.sendOffer(data.peerId, offer);
-            }
-          }
-          break;
+      setIsLoading(true);
+      setError(null);
+      setIsVideoReady(false);
 
-        case 'offer':
-          // Handle incoming offer
-          const answer = await handleOffer(data.offer);
-          if (answer) {
-            signalingService.sendAnswer(data.peerId, answer);
-          }
-          break;
-
-        case 'answer':
-          // Handle incoming answer
-          await handleAnswer(data.answer);
-          break;
-
-        case 'ice-candidate':
-          // Handle incoming ICE candidate
-          await handleIceCandidate(data.candidate);
-          break;
+      // Wait for video element to be available
+      let attempts = 0;
+      while (!localVideoRef.current && attempts < 10) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
       }
-    } catch (error) {
-      console.error('Error handling signaling message:', error);
-    }
-  };
 
-  const requestMediaPermissions = async () => {
-    try {
-      setIsConnecting(true);
-      setHasError(false);
-      setErrorMessage('');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Media devices not supported');
+      }
 
-      await initializeMedia();
-    } catch (error) {
-      console.error('Permission error:', error);
-      handleMediaError(error);
-    }
-  };
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      console.log('Available devices:', devices);
 
-  const handleMediaError = (error: any) => {
-    setHasError(true);
-    setIsConnecting(false);
-
-    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-      setErrorMessage('Camera and microphone access denied. Please allow access to use video chat.');
-    } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-      setErrorMessage('No camera or microphone found. Please connect a device and try again.');
-    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-      setErrorMessage('Could not access your camera or microphone. Please make sure no other app is using them.');
-    } else {
-      setErrorMessage('An error occurred while setting up video chat. Please try again.');
-    }
-  };
-
-  const initializeMedia = async () => {
-    try {
-      // Stop any existing streams first
-      if (localVideoRef.current && localVideoRef.current.srcObject) {
-        const stream = localVideoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-        localVideoRef.current.srcObject = null;
+      // Ensure video element exists before requesting stream
+      if (!localVideoRef.current) {
+        throw new Error('Video element not found');
       }
 
       console.log('Requesting media stream...');
@@ -141,65 +93,64 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
       });
 
       console.log('Media stream obtained:', stream);
-      // Store stream in state
-      setLocalStream(stream);
+      console.log('Video tracks:', stream.getVideoTracks());
+      console.log('Audio tracks:', stream.getAudioTracks());
 
-      // Set up local video immediately
-      if (localVideoRef.current) {
-        console.log('Setting up local video element...');
-        // Ensure video element is properly configured
-        localVideoRef.current.playsInline = true;
-        localVideoRef.current.autoplay = true;
-        localVideoRef.current.muted = true;
-        localVideoRef.current.srcObject = stream;
-        
-        try {
-          await localVideoRef.current.play();
-          console.log('Local video playback started');
-        } catch (error) {
-          console.error('Error playing local video:', error);
-          throw error;
-        }
+      // Get video element
+      const videoElement = localVideoRef.current;
+      if (!videoElement) {
+        throw new Error('Video element not found');
       }
 
-      // Short delay before marking as connected
-      setTimeout(() => {
-        setIsConnecting(false);
-      }, 1000);
+      // Set up video element
+      videoElement.srcObject = stream;
+      videoElement.playsInline = true;
+      videoElement.muted = true; // Important: keep muted to avoid feedback
+      videoElement.autoplay = true;
 
+      // Explicitly play the video
+      try {
+        console.log('Attempting to play video...');
+        const playPromise = await videoElement.play();
+        console.log('Video playing successfully');
+        setIsVideoReady(true);
+      } catch (playError) {
+        console.error('Error playing video:', playError);
+        throw new Error('Failed to play video stream');
+      }
+
+      setLocalStream(stream);
     } catch (error) {
       console.error('Error accessing media devices:', error);
-      handleMediaError(error);
-      throw error;
+      setError(getErrorMessage(error));
+      setIsLoading(false);
     }
   };
 
   const cleanupMedia = () => {
-    // Stop all tracks
+    console.log('Cleaning up media...');
     if (localStream) {
+      console.log('Stopping tracks...');
       localStream.getTracks().forEach(track => {
+        console.log(`Stopping track: ${track.kind}`);
         track.stop();
       });
+      setLocalStream(null);
     }
-
-    // Clear video element
     if (localVideoRef.current) {
+      console.log('Clearing video element');
       localVideoRef.current.srcObject = null;
     }
-
-    setLocalStream(null);
-    setRemoteStream(null);
-    setIsConnecting(true);
-    setHasError(false);
-    setErrorMessage('');
+    setIsLoading(true);
   };
 
   const toggleVideo = () => {
     if (localStream) {
       const videoTrack = localStream.getVideoTracks()[0];
       if (videoTrack) {
-        videoTrack.enabled = !isVideoOff;
-        setIsVideoOff(!isVideoOff);
+        videoTrack.enabled = isVideoOff;
+        setIsVideoOff(prev => !prev);
+        console.log(`Video ${isVideoOff ? 'enabled' : 'disabled'}`);
       }
     }
   };
@@ -208,26 +159,28 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
       if (audioTrack) {
-        audioTrack.enabled = !isMuted;
-        setIsMuted(!isMuted);
+        audioTrack.enabled = isMuted;
+        setIsMuted(prev => !prev);
+        console.log(`Audio ${isMuted ? 'enabled' : 'disabled'}`);
       }
     }
   };
 
-  const handleSkip = () => {
-    setIsSkipping(true);
-    // Clean up current connection
-    cleanupMedia();
-    // Find new peer
-    signalingService.findPeer();
-    setTimeout(() => {
-      setIsSkipping(false);
-    }, 2000);
+  const getErrorMessage = (error: any): string => {
+    console.log('Processing error:', error);
+    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      return 'Camera and microphone access denied. Please allow access to use video chat.';
+    } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+      return 'No camera or microphone found. Please connect a device and try again.';
+    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+      return 'Could not access your camera or microphone. Please make sure no other app is using them.';
+    }
+    return `An error occurred while setting up video chat: ${error.message || 'Unknown error'}`;
   };
 
   if (!isOpen) return null;
 
-  if (hasError) {
+  if (error) {
     return (
       <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
         <div className="text-center p-6 max-w-md">
@@ -235,10 +188,10 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
             <Camera className="w-12 h-12 text-red-500" />
           </div>
           <h3 className="text-xl text-white mb-4">Camera Access Required</h3>
-          <p className="text-white/60 mb-6">{errorMessage}</p>
+          <p className="text-white/60 mb-6">{error}</p>
           <div className="space-y-4">
             <button
-              onClick={requestMediaPermissions}
+              onClick={initializeCamera}
               className="w-full px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
             >
               Try Again
@@ -256,59 +209,53 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
   }
 
   return (
-    <div className="fixed inset-0 bg-black z-50">
-      <div ref={containerRef} className="h-full relative">
-        {isConnecting ? (
+    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+      <div className="w-full h-full max-w-6xl max-h-[90vh] relative">
+        {isInitializing ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-white">Connecting to {isMeetingStranger ? 'a stranger' : 'chat room'}...</p>
+              <p className="text-white">Initializing camera...</p>
             </div>
           </div>
         ) : (
           <div className="relative h-full flex flex-col">
-            {/* Videos Grid */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-              {/* Local Video */}
-              <div className="relative aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-white/10">
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover transform scale-x-[-1]"
-                  />
-                  {isVideoOff && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <VideoOff className="w-12 h-12 text-white/50" />
-                    </div>
-                  )}
-                  <div className="absolute bottom-2 left-2 text-xs text-white/60 bg-black/50 px-2 py-1 rounded">
-                    Your Video
+            {/* Video Container */}
+            <div ref={videoContainerRef} className="flex-1 flex items-center justify-center p-4">
+              <div className="relative w-full h-full max-w-4xl mx-auto bg-black rounded-xl overflow-hidden shadow-lg border border-white/10">
+                <video
+                  key="localVideo"
+                  ref={localVideoRef}
+                  playsInline
+                  muted
+                  autoPlay
+                  className={`w-full h-full object-cover transition-opacity duration-300 ${
+                    isVideoReady ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  style={{ transform: 'scaleX(-1)' }}
+                />
+                {isVideoOff && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <VideoOff className="w-12 h-12 text-white/50" />
                   </div>
+                )}
+                {(isLoading || !isVideoReady) && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
               </div>
-              
-              {/* Remote Video */}
-              {remoteStream && (
-                <div className="relative aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-white/10">
-                  <video
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                    srcObject={remoteStream}
-                  />
-                </div>
-              )}
             </div>
 
-            {/* Control Bar */}
-            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/50 to-transparent">
+            {/* Controls */}
+            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/50 to-transparent z-10">
               <div className="flex items-center justify-center space-x-6">
                 <button
                   onClick={toggleAudio}
+                  disabled={isLoading}
                   className={`p-4 rounded-full ${
                     isMuted ? 'bg-red-600' : 'bg-white/20'
-                  } hover:bg-opacity-90 transition-all transform hover:scale-105 active:scale-95`}
+                  } hover:bg-opacity-90 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   {isMuted ? (
                     <MicOff className="w-6 h-6 text-white" />
@@ -319,9 +266,10 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
 
                 <button
                   onClick={toggleVideo}
+                  disabled={isLoading}
                   className={`p-4 rounded-full ${
                     isVideoOff ? 'bg-red-600' : 'bg-white/20'
-                  } hover:bg-opacity-90 transition-all transform hover:scale-105 active:scale-95`}
+                  } hover:bg-opacity-90 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   {isVideoOff ? (
                     <VideoOff className="w-6 h-6 text-white" />
@@ -330,21 +278,12 @@ export function VideoModal({ isOpen, onClose, isMeetingStranger = false, maxPart
                   )}
                 </button>
 
-                {isMeetingStranger && (
-                  <button
-                    onClick={handleSkip}
-                    disabled={isSkipping}
-                    className="p-4 rounded-full bg-yellow-600 hover:bg-opacity-90 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <SkipForward className="w-6 h-6 text-white" />
-                  </button>
-                )}
-
                 <button
                   onClick={() => {
                     cleanupMedia();
                     onClose();
                   }}
+                  disabled={isLoading}
                   className="p-4 rounded-full bg-red-600 hover:bg-opacity-90 transition-all transform hover:scale-105 active:scale-95"
                 >
                   <PhoneOff className="w-6 h-6 text-white" />

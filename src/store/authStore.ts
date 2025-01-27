@@ -17,7 +17,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: (user) => set({ user, isAuthenticated: true }),
   logout: async () => {
     try {
+      // Sign out from Firebase first
       await signOut(auth);
+      // Then clear the store state
       set({ user: null, isAuthenticated: false });
     } catch (error) {
       console.error('Error signing out:', error);

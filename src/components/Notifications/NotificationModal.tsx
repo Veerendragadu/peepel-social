@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Heart, MessageCircle, UserPlus, Bell, Star } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
@@ -54,6 +54,26 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
       }
     }
   ];
+
+  // Handle history state for back button
+  useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ modal: 'notifications' }, '');
+    }
+
+    const handlePopState = () => {
+      if (window.history.state?.modal === 'notifications') {
+        // Prevent default back behavior
+        window.history.pushState({ modal: 'notifications' }, '');
+      } else {
+        // Close modal if we're going back from the initial state
+        onClose();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

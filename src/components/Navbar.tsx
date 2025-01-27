@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, User, Video, MessageSquare, Heart, Users, UserPlus } from 'lucide-react';
+import { Bell, User, MessageSquare, Heart, Users, UserPlus } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNotificationStore } from '../store/notificationStore';
 import { useMessageStore } from '../store/messageStore';
@@ -8,12 +8,11 @@ import { NotificationModal } from './Notifications/NotificationModal';
 import { FriendRequestModal } from './FriendRequest/FriendRequestModal';
 
 interface NavbarProps {
-  onStartVideoChat: () => void;
   onOpenMessages: () => void;
   onCloseMessages: () => void;
 }
 
-export function Navbar({ onStartVideoChat, onOpenMessages, onCloseMessages }: NavbarProps) {
+export function Navbar({ onOpenMessages, onCloseMessages }: NavbarProps) {
   const [showHeart, setShowHeart] = useState(true);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [isFriendRequestModalOpen, setIsFriendRequestModalOpen] = useState(false);
@@ -77,14 +76,6 @@ export function Navbar({ onStartVideoChat, onOpenMessages, onCloseMessages }: Na
 
             {/* Navigation Items */}
             <div className="flex items-center space-x-4">
-              <button
-                onClick={onStartVideoChat}
-                className="p-2 text-white/70 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
-                title="Video Chat"
-              >
-                <Video className="w-5 h-5" />
-              </button>
-
               <button
                 onClick={onOpenMessages}
                 className={`p-2 relative text-white/70 hover:bg-white/10 hover:text-white rounded-lg transition-colors ${

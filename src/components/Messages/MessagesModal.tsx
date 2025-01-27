@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Send, Smile, Search, UserPlus, Users, MessageSquare, Loader2, ArrowLeft } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
@@ -45,32 +45,82 @@ export function MessagesModal({ isOpen, onClose }: MessagesModalProps) {
   
   // Listen for openMessagesWith event
   useEffect(() => {
-    const handleOpenMessages = () => {
-      setShowSearch(true);
-      setShowChatList(false);
-      setNavigationStack(prev => [...prev, 'search']);
+    // Add a history entry when opening messages to enable back button
+    if (isOpen) {
+      window.history.pushState({ modal: 'messages' }, '');
+    }
+
+    const handleOpenMessages = async (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.user) {
+        const selectedUser = customEvent.detail.user;
+        console.log('Opening chat with user:', selectedUser);
+
+        try {
+          // Ensure we're in the right state
+          setShowSearch(false);
+          setShowChatList(false);
+          
+          setChatsLoading(true);
+          if (!user?.id) throw new Error('No user ID available');
+          
+          const chat = await createOrGetChat(user.id, selectedUser.id);
+          console.log('Created/got chat:', chat);
+
+          // Update states in sequence
+          setTimeout(() => {
+            setActiveChatId(chat.chatId);
+            setActiveChatUser(selectedUser);
+            setNavigationStack(prev => [...prev, 'chat']);
+          }, 0);
+        } catch (error) {
+          console.error('Error creating chat:', error);
+          setChatsError('Failed to create chat');
+        } finally {
+          setChatsLoading(false);
+        }
+      } else {
+        // Otherwise show search
+        setShowSearch(true);
+        setShowChatList(false);
+        setNavigationStack(prev => [...prev, 'search']);
+      }
     };
 
-    window.addEventListener('openMessagesWith' as any, handleOpenMessages);
-    window.addEventListener('openMessages', handleOpenMessages);
+    const handleOpenMessagesWrapper = (e: Event) => {
+      e.preventDefault();
+      handleOpenMessages(e as CustomEvent);
+    };
+
+    window.addEventListener('openMessagesWith', handleOpenMessagesWrapper);
+    window.addEventListener('openMessages', handleOpenMessagesWrapper);
 
     return () => {
-      window.removeEventListener('openMessagesWith' as any, handleOpenMessages);
-      window.removeEventListener('openMessages', handleOpenMessages);
+      window.removeEventListener('openMessagesWith', handleOpenMessagesWrapper);
+      window.removeEventListener('openMessages', handleOpenMessagesWrapper);
     };
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   // Handle browser back button
   useEffect(() => {
     const handlePopState = () => {
-      if (navigationStack.length > 1) {
+      // Check if we're handling a messages modal state
+      if (window.history.state?.modal === 'messages') {
+        // Prevent default back behavior
+        window.history.pushState({ modal: 'messages' }, '');
         handleBack();
+      } else {
+        // Close modal if we're going back from the initial state
+        onClose();
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [navigationStack]);
+  }, []);
 
   // Update unread counts when chats change
   useEffect(() => {
@@ -295,20 +345,27 @@ export function MessagesModal({ isOpen, onClose }: MessagesModalProps) {
   const handleUserSelect = async (selectedUser: User) => {
     if (!selectedUser || !user) return;
     
-    // Add current view to navigation stack
-    setNavigationStack(prev => [...prev, 'chat']);
+    // Prevent event bubbling
+    event?.stopPropagation?.();
+    
+    console.log('Selecting user for chat:', selectedUser);
+    setChatsLoading(true);
     
     try {
-      setChatsLoading(true);
+      if (!user.id) throw new Error('No user ID available');
       
-      // Create or get existing chat
+      // Create or get chat
       const chat = await createOrGetChat(user.id, selectedUser.id);
+      console.log('Created/got chat with ID:', chat.chatId);
 
+      // Update all states in a single batch to prevent race conditions
       setActiveChatId(chat.chatId);
       setActiveChatUser(selectedUser);
-      setShowChatList(false);
       setShowSearch(false);
+      setShowChatList(false);
       setSearchQuery('');
+      setSearchResults([]);
+      setNavigationStack(prev => [...prev, 'chat']);
       
     } catch (error) {
       console.error('Error creating chat:', error);
@@ -318,9 +375,18 @@ export function MessagesModal({ isOpen, onClose }: MessagesModalProps) {
     }
   };
 
+  const handleMessageClick = async (friend: User, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    console.log('Message click for friend:', friend);
+    await handleUserSelect(friend);
+  };
+
   const handleBack = () => {
     // Remove current view from navigation stack
     setNavigationStack(prev => prev.slice(0, -1));
+    const lastView = navigationStack[navigationStack.length - 2];
 
     if (activeChatUser) {
       setActiveChatId(null);
@@ -339,6 +405,7 @@ export function MessagesModal({ isOpen, onClose }: MessagesModalProps) {
       setSearchResults([]);
     }
   };
+
   
   if (!isOpen) return null;
 
@@ -440,7 +507,11 @@ export function MessagesModal({ isOpen, onClose }: MessagesModalProps) {
                 <MessageSquare className="w-12 h-12 text-white/20 mx-auto mb-4" />
                 <p className="text-white/60">No chats yet</p>
                 <button
-                  onClick={() => { setShowSearch(true); setShowChatList(false); }}
+                  onClick={() => { 
+                    setShowSearch(true); 
+                    setShowChatList(false);
+                    setNavigationStack(prev => [...prev, 'search']);
+                  }}
                   className="mt-4 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors"
                 >
                   Find Friends
